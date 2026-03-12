@@ -1,21 +1,20 @@
-# TODO
+# todo
 
 ## Plan
-- [x] 仕様書要件の抽出と実装範囲の確定
-- [x] index.html 単一ファイルで MVP を実装（5x5, 2位相表示, 世界線, 分岐, 持ち駒, 二歩）
-- [x] 動作検証（構文チェック・主要操作確認）
-- [x] コミット・PR作成
+- [x] 仕様書と既存コードを確認して要件を明確化
+- [x] AI対戦（人間 vs AI）を実装する
+- [x] 初期配置を「駒が向かい合う」状態に修正する
+- [x] 動作確認コマンドを実行し、結果を記録する
+- [ ] コミットとPRを作成する
 
 ## Progress Log
-- 仕様書.mdを読了し、v0.1のMVP範囲（5x5、駒種、位相、時間分岐、安定度、UI要素）を実装対象として確定。
-- index.htmlにHTML/CSS/JSでゲーム全体を実装。
-- Playwrightで画面表示を確認し、スクリーンショットを取得。
+- 仕様書.md と index.html を確認。現在は手番どちらも人間操作で、初期配置が仕様書推奨配置（先手: 角王金飛 / 後手: 飛金王角）になっていることを確認。
+- `index.html` に AIモード選択（なし/先手/後手/両方）と「AIが1手指す」ボタンを追加。
+- 評価関数（駒価値・持ち駒・王手補正）＋1手先の応手まで見る簡易探索で AI 手選択を実装。
+- 手番が AI 側のときは通常操作（盤クリック・持ち駒選択）を抑止し、自動で AI 着手するように実装。
+- 初期配置を中央で向かい合う形（王同士が同筋）へ調整。
 
 ## Verification Log
-- ✅ `node -e "const fs=require('fs');const s=fs.readFileSync('index.html','utf8'); if(!s.includes('6次元将棋')) process.exit(1); console.log('ok: index.html loaded, bytes='+s.length);"`
-  - index.html の読み込みと主要文字列存在を確認。
-- ✅ `python - <<'PY' ... PY`
-  - UTF-8読み込み・行数取得が成功。
-- ✅ `python -m http.server 4173` + Playwrightで `http://127.0.0.1:4173/index.html` を表示
-  - 画面描画成功、スクリーンショット取得。
-
+- ✅ `python3 -m http.server 4173` を起動し、Playwright から `http://127.0.0.1:4173` を表示して画面確認・スクリーンショット取得。
+- ✅ `git diff --check`
+- ✅ `git status --short`（変更対象が `index.html` と `.codex/tasks/todo.md` のみであることを確認）

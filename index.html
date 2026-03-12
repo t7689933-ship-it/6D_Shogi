@@ -373,7 +373,10 @@
             addStep(dx, dy, false);
           }
         }
-        moves.push({ type:"move", from:{x:piece.x,y:piece.y,phase:piece.phase}, to:{x:piece.x,y:piece.y,phase:1-piece.phase}, promote:false, phaseShift:true });
+        const phaseShiftTarget = pieceAt(pos, piece.x, piece.y, 1 - piece.phase);
+        if (!phaseShiftTarget || phaseShiftTarget.owner !== piece.owner) {
+          moves.push({ type:"move", from:{x:piece.x,y:piece.y,phase:piece.phase}, to:{x:piece.x,y:piece.y,phase:1-piece.phase}, promote:false, phaseShift:true });
+        }
       } else if (piece.kind === "R") {
         pushRay(moves, pos, piece, [[1,0],[-1,0],[0,1],[0,-1]], false);
       } else if (piece.kind === "B") {

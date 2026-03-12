@@ -183,7 +183,16 @@
         <label class="small">分岐元手数
           <select id="branchTurn"></select>
         </label>
+        <label class="small">AI
+          <select id="aiMode">
+            <option value="none">なし</option>
+            <option value="gote" selected>後手</option>
+            <option value="sente">先手</option>
+            <option value="both">両方</option>
+          </select>
+        </label>
         <button id="toggleBranch">分岐モード: OFF</button>
+        <button id="aiStepBtn">AIが1手指す</button>
         <button id="resetBtn">初期化</button>
       </div>
       <p class="small" id="hint" style="margin-top:8px;">駒を選択して移動先をクリック。持ち駒は右パネルのボタンから選択。</p>
@@ -212,6 +221,7 @@
     const BOARD_SIZE = 5;
     const MAX_TIME_INTERFERE = 2;
     const BRANCH_COST = 35;
+    const AI_DELAY_MS = 220;
     const PIECE_ORDER = ["K", "R", "B", "G", "P"];
     const PIECE_LABEL = { K: "王", R: "飛", B: "角", G: "金", P: "歩", "+P": "と" };
     const GOLD_DIR = {
@@ -243,9 +253,9 @@
       };
 
       // 仕様推奨配置
-      add("B",0,0,0,0); add("K",0,0,1,0); add("G",0,0,2,0); add("R",0,0,3,0);
+      add("B",0,0,1,0); add("K",0,0,2,0); add("G",0,0,3,0); add("R",0,0,4,0);
       add("P",0,0,1,1); add("P",0,0,3,1);
-      add("R",1,0,1,4); add("G",1,0,2,4); add("K",1,0,3,4); add("B",1,0,4,4);
+      add("R",1,0,0,4); add("G",1,0,1,4); add("K",1,0,2,4); add("B",1,0,3,4);
       add("P",1,0,1,3); add("P",1,0,3,3);
 
       return {
@@ -273,6 +283,8 @@
         legalMoves: [],
         selectedDrop: null,
         logs: ["開始"],
+        aiMode: "gote",
+        aiPending: false,
         idFactory,
       };
     }
@@ -484,6 +496,76 @@
       finishTurn();
     }
 
+    function isAiPlayer(player) {
+      if (game.aiMode === "both") return true;
+      if (game.aiMode === "sente") return player === 0;
+      if (game.aiMode === "gote") return player === 1;
+      return false;
+    }
+
+    function scorePosition(pos, aiPlayer) {
+      const pieceValue = { K: 10000, R: 9, B: 7, G: 6, P: 1 };
+      let score = 0;
+      for (const piece of Object.values(pos.pieces)) {
+        const sign = piece.owner === aiPlayer ? 1 : -1;
+        const base = pieceValue[piece.kind] + (piece.promoted ? 4 : 0);
+        score += sign * base;
+      }
+      for (const kind of PIECE_ORDER) {
+        score += pos.hands[aiPlayer][kind] * pieceValue[kind] * 0.9;
+        score -= pos.hands[1 - aiPlayer][kind] * pieceValue[kind] * 0.9;
+      }
+      if (isKingInCheck(pos, aiPlayer)) score -= 3;
+      if (isKingInCheck(pos, 1 - aiPlayer)) score += 3;
+      return score;
+    }
+
+    function pickAiMove(pos) {
+      const aiPlayer = pos.playerToMove;
+      const moves = legalMovesFor(pos);
+      if (!moves.length) return null;
+      let best = moves[0];
+      let bestScore = -Infinity;
+      for (const move of moves) {
+        const next = applyMoveToPosition(pos, move, aiPlayer);
+        const enemyMoves = legalMovesFor(next);
+        let score = scorePosition(next, aiPlayer);
+        if (!enemyMoves.length) score += 5000;
+        else {
+          let enemyBest = Infinity;
+          for (const em of enemyMoves) {
+            const afterEnemy = applyMoveToPosition(next, em, next.playerToMove);
+            const s = scorePosition(afterEnemy, aiPlayer);
+            if (s < enemyBest) enemyBest = s;
+          }
+          score = (score + enemyBest) / 2;
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          best = move;
+        }
+      }
+      return best;
+    }
+
+    function triggerAiTurn() {
+      if (game.aiPending || game.branchMode) return;
+      const pos = currentPosition();
+      if (!isAiPlayer(pos.playerToMove)) return;
+      game.aiPending = true;
+      setTimeout(() => {
+        game.aiPending = false;
+        const now = currentPosition();
+        if (!isAiPlayer(now.playerToMove) || game.branchMode) return;
+        const move = pickAiMove(now);
+        if (!move) {
+          render();
+          return;
+        }
+        applyToCurrent(move);
+      }, AI_DELAY_MS);
+    }
+
     function branchApply(move, fromTurn) {
       const source = currentTimeline();
       const srcPos = source.positions[fromTurn];
@@ -512,6 +594,7 @@
       game.legalMoves = [];
       updateBranchTurnOptions();
       render();
+      triggerAiTurn();
     }
 
     function playableMoves() {
@@ -527,6 +610,7 @@
     function selectPieceAt(x, y, phase) {
       const pos = game.branchMode ? currentTimeline().positions[game.branchFromTurn] : currentPosition();
       if (!pos) return;
+      if (!game.branchMode && isAiPlayer(pos.playerToMove)) return;
       const piece = pieceAt(pos, x, y, phase);
       if (!piece || piece.owner !== pos.playerToMove) return;
       game.selectedDrop = null;
@@ -566,6 +650,7 @@
 
     function chooseDrop(kind, phase) {
       const pos = game.branchMode ? currentTimeline().positions[game.branchFromTurn] : currentPosition();
+      if (!game.branchMode && isAiPlayer(pos.playerToMove)) return;
       const player = pos.playerToMove;
       if (pos.hands[player][kind] <= 0) return;
       game.selected = null;
@@ -607,7 +692,8 @@
         pos.parentTimelineId !== null ? `分岐元 T${pos.parentTimelineId}@${pos.branchedFromTurn}` : "起点世界線",
       ];
       const win = winnerText();
-      document.getElementById("meta").innerHTML = txt.map(t => `<span>${t}</span>`).join("") + (win ? ` <span class=\"alert\">${win}</span>` : "");
+      const aiTxt = game.aiMode === "none" ? "AIなし" : `AI:${game.aiMode === "gote" ? "後手" : game.aiMode === "sente" ? "先手" : "両方"}`;
+      document.getElementById("meta").innerHTML = txt.concat([aiTxt]).map(t => `<span>${t}</span>`).join("") + (win ? ` <span class=\"alert\">${win}</span>` : "");
     }
 
     function renderBoards() {
@@ -726,6 +812,26 @@
       render();
     };
 
+    document.getElementById("aiMode").onchange = (e) => {
+      game.aiMode = e.target.value;
+      game.selected = null;
+      game.selectedDrop = null;
+      game.legalMoves = [];
+      render();
+      triggerAiTurn();
+    };
+
+    document.getElementById("aiStepBtn").onclick = () => {
+      if (game.branchMode) return;
+      const pos = currentPosition();
+      const move = pickAiMove(pos);
+      if (!move) {
+        render();
+        return;
+      }
+      applyToCurrent(move);
+    };
+
     document.getElementById("branchTurn").onchange = (e) => {
       game.branchFromTurn = Number(e.target.value);
       game.selected = null;
@@ -738,11 +844,14 @@
       game = createGame();
       updateBranchTurnOptions();
       document.getElementById("toggleBranch").textContent = "分岐モード: OFF";
+      document.getElementById("aiMode").value = game.aiMode;
       render();
+      triggerAiTurn();
     };
 
     updateBranchTurnOptions();
     render();
+    triggerAiTurn();
   </script>
 </body>
 </html>

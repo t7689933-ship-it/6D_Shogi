@@ -1,1 +1,748 @@
-index.html
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>6次元将棋 MVP v0.1</title>
+  <style>
+    :root {
+      --bg: #13131a;
+      --panel: #1d1f2a;
+      --line: #3a3f58;
+      --text: #ecf1ff;
+      --phase0: #dce9ff;
+      --phase1: #2f3450;
+      --phase1-text: #f2f5ff;
+      --accent: #6bb2ff;
+      --warn: #ff7b7b;
+      --ok: #88d990;
+      --select: #ffe186;
+      --enemy: #ff9f9f;
+      --ally: #8cc9ff;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+
+    .wrap {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      grid-template-columns: 2fr 1fr;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 10px;
+    }
+
+    .header {
+      grid-column: 1 / -1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .meta {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 14px;
+    }
+
+    .alert { color: var(--warn); font-weight: 700; }
+    .good { color: var(--ok); }
+
+    .boards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .board-title {
+      margin-bottom: 8px;
+      font-size: 14px;
+      opacity: 0.92;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 4px;
+      user-select: none;
+    }
+
+    .cell {
+      height: 62px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      position: relative;
+      cursor: pointer;
+      font-size: 24px;
+    }
+
+    .phase0 .cell { background: var(--phase0); color: #223; }
+    .phase1 .cell { background: var(--phase1); color: var(--phase1-text); }
+
+    .cell.selected { outline: 3px solid var(--select); }
+    .cell.legal { box-shadow: inset 0 0 0 3px #67e18b; }
+    .cell.enemy { box-shadow: inset 0 0 0 3px var(--enemy); }
+
+    .piece-gote { transform: rotate(180deg); color: #ffdede; }
+
+    .sidebar {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .hands { display: grid; gap: 8px; }
+
+    .hand-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    button, select {
+      background: #2d3550;
+      color: var(--text);
+      border: 1px solid #4f5f95;
+      border-radius: 7px;
+      padding: 5px 8px;
+      font-size: 13px;
+    }
+
+    button:hover { filter: brightness(1.12); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    .line-item {
+      margin-top: 6px;
+      padding: 6px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .line-item.active { border-color: var(--accent); background: rgba(107,178,255,0.15); }
+    .line-item.collapsed { opacity: 0.5; }
+
+    .small { font-size: 12px; opacity: 0.88; }
+
+    .log {
+      max-height: 220px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 6px;
+      font-size: 12px;
+      background: #161925;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    @media (max-width: 980px) {
+      .wrap { grid-template-columns: 1fr; }
+      .boards { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel header">
+      <h1>6次元将棋 MVP v0.1</h1>
+      <div class="meta" id="meta"></div>
+    </div>
+
+    <div class="panel">
+      <div class="boards" id="boards"></div>
+      <div class="controls">
+        <label class="small">分岐元手数
+          <select id="branchTurn"></select>
+        </label>
+        <button id="toggleBranch">分岐モード: OFF</button>
+        <button id="resetBtn">初期化</button>
+      </div>
+      <p class="small" id="hint" style="margin-top:8px;">駒を選択して移動先をクリック。持ち駒は右パネルのボタンから選択。</p>
+    </div>
+
+    <div class="sidebar">
+      <div class="panel">
+        <h3>持ち駒</h3>
+        <div class="hands" id="hands"></div>
+        <p class="small" style="margin-top:6px;">打つ時に位相(0/1)を選択できます。</p>
+      </div>
+
+      <div class="panel">
+        <h3>世界線ツリー</h3>
+        <div id="timelines"></div>
+      </div>
+
+      <div class="panel">
+        <h3>ログ</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const BOARD_SIZE = 5;
+    const MAX_TIME_INTERFERE = 2;
+    const BRANCH_COST = 35;
+    const PIECE_ORDER = ["K", "R", "B", "G", "P"];
+    const PIECE_LABEL = { K: "王", R: "飛", B: "角", G: "金", P: "歩", "+P": "と" };
+    const GOLD_DIR = {
+      0: [[0,-1],[-1,-1],[1,-1],[-1,0],[1,0],[0,1]],
+      1: [[0,1],[-1,1],[1,1],[-1,0],[1,0],[0,-1]]
+    };
+
+    function clone(obj) { return JSON.parse(JSON.stringify(obj)); }
+    function inBoard(x, y) { return x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE; }
+    function handTemplate() { return { K:0, R:0, B:0, G:0, P:0 }; }
+
+    function createEmptyBoard() {
+      return Array.from({ length: BOARD_SIZE }, () => Array(BOARD_SIZE).fill(null));
+    }
+
+    function makeIdFactory() {
+      let n = 1;
+      return () => `p${n++}`;
+    }
+
+    function initialPosition(idFactory) {
+      const boards = [createEmptyBoard(), createEmptyBoard()];
+      const pieces = {};
+      const add = (kind, owner, phase, x, y) => {
+        const id = idFactory();
+        const p = { id, kind, owner, promoted: false, phase, x, y, inHand: false };
+        pieces[id] = p;
+        boards[phase][y][x] = id;
+      };
+
+      // 仕様推奨配置
+      add("B",0,0,0,0); add("K",0,0,1,0); add("G",0,0,2,0); add("R",0,0,3,0);
+      add("P",0,0,1,1); add("P",0,0,3,1);
+      add("R",1,0,1,4); add("G",1,0,2,4); add("K",1,0,3,4); add("B",1,0,4,4);
+      add("P",1,0,1,3); add("P",1,0,3,3);
+
+      return {
+        timelineId: 0,
+        turn: 0,
+        playerToMove: 0,
+        phaseBoards: boards,
+        hands: [handTemplate(), handTemplate()],
+        stability: 100,
+        pieces,
+        parentTimelineId: null,
+        branchedFromTurn: null,
+      };
+    }
+
+    function createGame() {
+      const idFactory = makeIdFactory();
+      const p = initialPosition(idFactory);
+      return {
+        timelines: [{ id:0, positions:[p], isCollapsed:false }],
+        selectedTimelineId: 0,
+        branchMode: false,
+        branchFromTurn: null,
+        selected: null,
+        legalMoves: [],
+        selectedDrop: null,
+        logs: ["開始"],
+        idFactory,
+      };
+    }
+
+    let game = createGame();
+
+    function getTimeline(id) { return game.timelines.find(t => t.id === id); }
+    function currentTimeline() { return getTimeline(game.selectedTimelineId); }
+    function currentPosition() { const t = currentTimeline(); return t.positions[t.positions.length - 1]; }
+
+    function pieceAt(pos, x, y, phase) {
+      const id = pos.phaseBoards[phase][y][x];
+      return id ? pos.pieces[id] : null;
+    }
+
+    function findKings(pos, player) {
+      const kings = [];
+      for (const p of Object.values(pos.pieces)) {
+        if (!p.inHand && p.kind === "K" && p.owner === player) kings.push(p);
+      }
+      return kings;
+    }
+
+    function pushRay(moves, pos, piece, dirs, allowFlip = false) {
+      for (const [dx, dy] of dirs) {
+        let step = 1;
+        while (true) {
+          const tx = piece.x + dx * step;
+          const ty = piece.y + dy * step;
+          if (!inBoard(tx, ty)) break;
+          for (const phase of allowFlip ? [piece.phase, 1 - piece.phase] : [piece.phase]) {
+            const target = pieceAt(pos, tx, ty, phase);
+            if (!target) {
+              moves.push({ type:"move", from:{x:piece.x,y:piece.y,phase:piece.phase}, to:{x:tx,y:ty,phase}, promote:false });
+            } else if (target.owner !== piece.owner) {
+              moves.push({ type:"move", from:{x:piece.x,y:piece.y,phase:piece.phase}, to:{x:tx,y:ty,phase}, promote:false });
+            }
+          }
+          const blockSame = pieceAt(pos, tx, ty, piece.phase);
+          const blockFlip = allowFlip ? pieceAt(pos, tx, ty, 1 - piece.phase) : null;
+          if (blockSame || blockFlip) break;
+          step++;
+        }
+      }
+    }
+
+    function piecePseudoMoves(pos, piece) {
+      const moves = [];
+      if (piece.inHand) return moves;
+      const dir = piece.owner === 0 ? -1 : 1;
+      const addStep = (dx, dy, allowFlip = false) => {
+        for (const phase of allowFlip ? [piece.phase, 1 - piece.phase] : [piece.phase]) {
+          const tx = piece.x + dx;
+          const ty = piece.y + dy;
+          if (!inBoard(tx, ty)) continue;
+          const target = pieceAt(pos, tx, ty, phase);
+          if (!target || target.owner !== piece.owner) {
+            moves.push({ type:"move", from:{x:piece.x,y:piece.y,phase:piece.phase}, to:{x:tx,y:ty,phase}, promote:false });
+          }
+        }
+      };
+
+      if (piece.kind === "K") {
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            if (dx === 0 && dy === 0) continue;
+            addStep(dx, dy, false);
+          }
+        }
+        moves.push({ type:"move", from:{x:piece.x,y:piece.y,phase:piece.phase}, to:{x:piece.x,y:piece.y,phase:1-piece.phase}, promote:false, phaseShift:true });
+      } else if (piece.kind === "R") {
+        pushRay(moves, pos, piece, [[1,0],[-1,0],[0,1],[0,-1]], false);
+      } else if (piece.kind === "B") {
+        pushRay(moves, pos, piece, [[1,1],[1,-1],[-1,1],[-1,-1]], true);
+      } else if (piece.kind === "G" || (piece.kind === "P" && piece.promoted)) {
+        for (const [dx, dy] of GOLD_DIR[piece.owner]) addStep(dx, dy, false);
+      } else if (piece.kind === "P") {
+        addStep(0, dir, false);
+      }
+
+      if (piece.kind === "P" && !piece.promoted) {
+        const ty = piece.y + dir;
+        if (inBoard(piece.x, ty) && ((piece.owner === 0 && ty === 0) || (piece.owner === 1 && ty === BOARD_SIZE - 1))) {
+          const base = moves.filter(m => m.to.y === ty);
+          base.forEach(m => moves.push({ ...clone(m), promote: true }));
+        }
+      }
+      return moves;
+    }
+
+    function attackedSquares(pos, byPlayer, phase) {
+      const set = new Set();
+      for (const piece of Object.values(pos.pieces)) {
+        if (piece.inHand || piece.owner !== byPlayer || piece.phase !== phase) continue;
+        const pm = piecePseudoMoves(pos, piece);
+        for (const m of pm) {
+          if (m.to.phase === phase) set.add(`${m.to.x},${m.to.y}`);
+        }
+      }
+      return set;
+    }
+
+    function isKingInCheck(pos, player) {
+      const kings = findKings(pos, player);
+      const enemy = 1 - player;
+      for (const king of kings) {
+        const atk = attackedSquares(pos, enemy, king.phase);
+        if (atk.has(`${king.x},${king.y}`)) return true;
+      }
+      return false;
+    }
+
+    function applyMoveToPosition(base, move, actor) {
+      const pos = clone(base);
+      if (move.type === "drop") {
+        const id = game.idFactory();
+        pos.hands[actor][move.pieceKind]--;
+        const piece = { id, kind: move.pieceKind, owner: actor, promoted: false, phase: move.to.phase, x: move.to.x, y: move.to.y, inHand: false };
+        pos.pieces[id] = piece;
+        pos.phaseBoards[move.to.phase][move.to.y][move.to.x] = id;
+      } else {
+        const srcId = pos.phaseBoards[move.from.phase][move.from.y][move.from.x];
+        const piece = pos.pieces[srcId];
+        pos.phaseBoards[move.from.phase][move.from.y][move.from.x] = null;
+        const targetId = pos.phaseBoards[move.to.phase][move.to.y][move.to.x];
+        if (targetId) {
+          const victim = pos.pieces[targetId];
+          pos.phaseBoards[move.to.phase][move.to.y][move.to.x] = null;
+          victim.inHand = true; victim.x = null; victim.y = null; victim.phase = null; victim.owner = actor; victim.promoted = false;
+          pos.hands[actor][victim.kind]++;
+        }
+        piece.phase = move.to.phase;
+        piece.x = move.to.x;
+        piece.y = move.to.y;
+        if (move.promote && piece.kind === "P") piece.promoted = true;
+        pos.phaseBoards[piece.phase][piece.y][piece.x] = piece.id;
+      }
+      pos.playerToMove = 1 - actor;
+      pos.turn += 1;
+      return pos;
+    }
+
+    function hasNifu(pos, player, x, phase) {
+      for (let y = 0; y < BOARD_SIZE; y++) {
+        const id = pos.phaseBoards[phase][y][x];
+        if (!id) continue;
+        const p = pos.pieces[id];
+        if (p.owner === player && p.kind === "P" && !p.promoted) return true;
+      }
+      return false;
+    }
+
+    function legalDrops(pos, player) {
+      const out = [];
+      for (const kind of PIECE_ORDER) {
+        if (pos.hands[player][kind] <= 0) continue;
+        for (let phase = 0; phase <= 1; phase++) {
+          for (let y = 0; y < BOARD_SIZE; y++) {
+            for (let x = 0; x < BOARD_SIZE; x++) {
+              if (pos.phaseBoards[phase][y][x]) continue;
+              if (kind === "P") {
+                if (hasNifu(pos, player, x, phase)) continue;
+                if ((player === 0 && y === 0) || (player === 1 && y === BOARD_SIZE - 1)) continue;
+              }
+              const move = { type:"drop", pieceKind:kind, timelineId:pos.timelineId, to:{x,y,phase} };
+              const next = applyMoveToPosition(pos, move, player);
+              if (!isKingInCheck(next, player)) out.push(move);
+            }
+          }
+        }
+      }
+      return out;
+    }
+
+    function legalPieceMoves(pos, player) {
+      const out = [];
+      for (const piece of Object.values(pos.pieces)) {
+        if (piece.inHand || piece.owner !== player) continue;
+        for (const move of piecePseudoMoves(pos, piece)) {
+          const next = applyMoveToPosition(pos, move, player);
+          if (!isKingInCheck(next, player)) out.push(move);
+        }
+      }
+      return out;
+    }
+
+    function legalMovesFor(pos) {
+      const player = pos.playerToMove;
+      return [...legalPieceMoves(pos, player), ...legalDrops(pos, player)];
+    }
+
+    function moveText(move) {
+      if (move.type === "drop") {
+        return `打:${PIECE_LABEL[move.pieceKind]}→(${move.to.x+1},${move.to.y+1}) p${move.to.phase}`;
+      }
+      const promo = move.promote ? "成" : "";
+      const shift = move.phaseShift ? "位相反転" : "";
+      return `移:${move.from.x+1},${move.from.y+1},p${move.from.phase}→${move.to.x+1},${move.to.y+1},p${move.to.phase}${promo}${shift}`;
+    }
+
+    function applyToCurrent(move) {
+      const tl = currentTimeline();
+      const pos = currentPosition();
+      const actor = pos.playerToMove;
+      const next = applyMoveToPosition(pos, move, actor);
+      next.timelineId = tl.id;
+      tl.positions.push(next);
+      game.logs.unshift(`T${tl.id} #${pos.turn} ${actor===0?"先":"後"}: ${moveText(move)}`);
+      finishTurn();
+    }
+
+    function branchApply(move, fromTurn) {
+      const source = currentTimeline();
+      const srcPos = source.positions[fromTurn];
+      const actor = srcPos.playerToMove;
+      const next = applyMoveToPosition(srcPos, move, actor);
+      const newId = Math.max(...game.timelines.map(t => t.id)) + 1;
+      next.timelineId = newId;
+      next.parentTimelineId = source.id;
+      next.branchedFromTurn = fromTurn;
+      next.stability = Math.max(0, srcPos.stability - BRANCH_COST);
+
+      const newTimeline = {
+        id: newId,
+        positions: source.positions.slice(0, fromTurn + 1).map(clone).concat([next]),
+        isCollapsed: next.stability <= 0,
+      };
+      game.timelines.push(newTimeline);
+      game.selectedTimelineId = newId;
+      game.logs.unshift(`分岐: T${source.id}@${fromTurn} → T${newId} (${moveText(move)})`);
+      finishTurn();
+    }
+
+    function finishTurn() {
+      game.selected = null;
+      game.selectedDrop = null;
+      game.legalMoves = [];
+      updateBranchTurnOptions();
+      render();
+    }
+
+    function playableMoves() {
+      const pos = currentPosition();
+      if (game.branchMode && game.branchFromTurn !== null) {
+        const src = currentTimeline().positions[game.branchFromTurn];
+        if (!src) return [];
+        return legalMovesFor(src);
+      }
+      return legalMovesFor(pos);
+    }
+
+    function selectPieceAt(x, y, phase) {
+      const pos = game.branchMode ? currentTimeline().positions[game.branchFromTurn] : currentPosition();
+      if (!pos) return;
+      const piece = pieceAt(pos, x, y, phase);
+      if (!piece || piece.owner !== pos.playerToMove) return;
+      game.selectedDrop = null;
+      game.selected = { x, y, phase };
+      game.legalMoves = playableMoves().filter(m => m.type === "move" && m.from.x === x && m.from.y === y && m.from.phase === phase);
+      render();
+    }
+
+    function tryActCell(x, y, phase) {
+      if (!game.selected && !game.selectedDrop) {
+        selectPieceAt(x, y, phase);
+        return;
+      }
+      const hit = game.legalMoves.find(m => m.to.x === x && m.to.y === y && m.to.phase === phase);
+      if (!hit) {
+        selectPieceAt(x, y, phase);
+        return;
+      }
+      if (game.branchMode && game.branchFromTurn !== null) branchApply(hit, game.branchFromTurn);
+      else applyToCurrent(hit);
+    }
+
+    function updateBranchTurnOptions() {
+      const sel = document.getElementById("branchTurn");
+      const tl = currentTimeline();
+      const now = tl.positions.length - 1;
+      sel.innerHTML = "";
+      for (let t = Math.max(0, now - MAX_TIME_INTERFERE); t <= now; t++) {
+        const o = document.createElement("option");
+        o.value = String(t);
+        o.textContent = `手数 ${t}`;
+        sel.appendChild(o);
+      }
+      sel.value = String(Math.max(0, now - 1));
+      game.branchFromTurn = Number(sel.value);
+    }
+
+    function chooseDrop(kind, phase) {
+      const pos = game.branchMode ? currentTimeline().positions[game.branchFromTurn] : currentPosition();
+      const player = pos.playerToMove;
+      if (pos.hands[player][kind] <= 0) return;
+      game.selected = null;
+      game.selectedDrop = { kind, phase };
+      game.legalMoves = playableMoves().filter(m => m.type === "drop" && m.pieceKind === kind && m.to.phase === phase);
+      render();
+    }
+
+    function maybeDropOnCell(x, y, phase) {
+      if (!game.selectedDrop) return false;
+      const hit = game.legalMoves.find(m => m.type === "drop" && m.to.x === x && m.to.y === y && m.to.phase === phase);
+      if (!hit) return false;
+      if (game.branchMode && game.branchFromTurn !== null) branchApply(hit, game.branchFromTurn);
+      else applyToCurrent(hit);
+      return true;
+    }
+
+    function winnerText() {
+      const alive = game.timelines.filter(t => !t.isCollapsed);
+      if (alive.length === 0) return "全世界線が崩壊: 引き分け";
+      const mustMove = new Set(alive.map(t => t.positions.at(-1).playerToMove));
+      for (const player of mustMove) {
+        const anyLegal = alive.some(t => {
+          const p = t.positions.at(-1);
+          return p.playerToMove === player && legalMovesFor(p).length > 0;
+        });
+        if (!anyLegal) return `${player===0?"先手":"後手"}合法手なし: ${player===0?"後手":"先手"}勝ち`;
+      }
+      return null;
+    }
+
+    function renderMeta() {
+      const pos = currentPosition();
+      const txt = [
+        `世界線 T${pos.timelineId}`,
+        `手数 ${pos.turn}`,
+        `手番 ${pos.playerToMove===0?"先手":"後手"}`,
+        `安定度 ${pos.stability}`,
+        pos.parentTimelineId !== null ? `分岐元 T${pos.parentTimelineId}@${pos.branchedFromTurn}` : "起点世界線",
+      ];
+      const win = winnerText();
+      document.getElementById("meta").innerHTML = txt.map(t => `<span>${t}</span>`).join("") + (win ? ` <span class=\"alert\">${win}</span>` : "");
+    }
+
+    function renderBoards() {
+      const root = document.getElementById("boards");
+      root.innerHTML = "";
+      const pos = game.branchMode ? currentTimeline().positions[game.branchFromTurn] : currentPosition();
+      for (let phase = 0; phase <= 1; phase++) {
+        const box = document.createElement("div");
+        const bd = document.createElement("div");
+        bd.className = `board phase${phase}`;
+        const title = document.createElement("div");
+        title.className = "board-title";
+        title.textContent = `位相 ${phase}`;
+        box.appendChild(title);
+        for (let y = 0; y < BOARD_SIZE; y++) {
+          for (let x = 0; x < BOARD_SIZE; x++) {
+            const c = document.createElement("div");
+            c.className = "cell";
+            const id = pos.phaseBoards[phase][y][x];
+            if (id) {
+              const p = pos.pieces[id];
+              c.textContent = PIECE_LABEL[p.promoted ? "+P" : p.kind];
+              if (p.owner === 1) c.classList.add("piece-gote");
+            }
+            if (game.selected && game.selected.x === x && game.selected.y === y && game.selected.phase === phase) c.classList.add("selected");
+            const l = game.legalMoves.find(m => m.to.x === x && m.to.y === y && m.to.phase === phase);
+            if (l) {
+              c.classList.add("legal");
+              if (id) c.classList.add("enemy");
+            }
+            c.onclick = () => {
+              if (maybeDropOnCell(x, y, phase)) return;
+              tryActCell(x, y, phase);
+            };
+            bd.appendChild(c);
+          }
+        }
+        box.appendChild(bd);
+        root.appendChild(box);
+      }
+    }
+
+    function renderHands() {
+      const pos = game.branchMode ? currentTimeline().positions[game.branchFromTurn] : currentPosition();
+      const root = document.getElementById("hands");
+      root.innerHTML = "";
+      [0,1].forEach(player => {
+        const d = document.createElement("div");
+        d.innerHTML = `<div>${player===0?"先手":"後手"}</div>`;
+        const row = document.createElement("div");
+        row.className = "hand-row";
+        for (const kind of PIECE_ORDER) {
+          const count = pos.hands[player][kind];
+          if (count <= 0) continue;
+          [0,1].forEach(phase => {
+            const b = document.createElement("button");
+            b.textContent = `${PIECE_LABEL[kind]}x${count}→p${phase}`;
+            b.disabled = player !== pos.playerToMove;
+            b.onclick = () => chooseDrop(kind, phase);
+            row.appendChild(b);
+          });
+        }
+        if (!row.children.length) row.innerHTML = '<span class="small">なし</span>';
+        d.appendChild(row);
+        root.appendChild(d);
+      });
+    }
+
+    function renderTimelines() {
+      const root = document.getElementById("timelines");
+      root.innerHTML = "";
+      const lines = [...game.timelines].sort((a,b) => a.id - b.id);
+      for (const t of lines) {
+        const last = t.positions.at(-1);
+        const div = document.createElement("div");
+        div.className = "line-item" + (t.id === game.selectedTimelineId ? " active" : "") + (t.isCollapsed ? " collapsed" : "");
+        div.innerHTML = `<strong>T${t.id}</strong> 手数:${last.turn} 安定:${last.stability}<br><span class="small">親:${last.parentTimelineId===null?"-":`T${last.parentTimelineId}@${last.branchedFromTurn}`} / 手番:${last.playerToMove===0?"先":"後"}</span>`;
+        div.onclick = () => {
+          game.selectedTimelineId = t.id;
+          game.selected = null;
+          game.selectedDrop = null;
+          game.legalMoves = [];
+          updateBranchTurnOptions();
+          render();
+        };
+        root.appendChild(div);
+      }
+    }
+
+    function renderLog() {
+      document.getElementById("log").innerHTML = game.logs.slice(0, 50).map(x => `<div>${x}</div>`).join("");
+    }
+
+    function renderHints() {
+      const pos = game.branchMode ? currentTimeline().positions[game.branchFromTurn] : currentPosition();
+      const checks = isKingInCheck(pos, pos.playerToMove);
+      const source = game.branchMode ? `分岐元手数 ${game.branchFromTurn}` : "現在手数";
+      document.getElementById("hint").textContent = `${source} を操作中。${checks ? "王手中です。" : ""}`;
+    }
+
+    function render() {
+      renderMeta();
+      renderBoards();
+      renderHands();
+      renderTimelines();
+      renderLog();
+      renderHints();
+    }
+
+    document.getElementById("toggleBranch").onclick = () => {
+      game.branchMode = !game.branchMode;
+      document.getElementById("toggleBranch").textContent = `分岐モード: ${game.branchMode ? "ON" : "OFF"}`;
+      game.selected = null;
+      game.selectedDrop = null;
+      game.legalMoves = [];
+      render();
+    };
+
+    document.getElementById("branchTurn").onchange = (e) => {
+      game.branchFromTurn = Number(e.target.value);
+      game.selected = null;
+      game.selectedDrop = null;
+      game.legalMoves = [];
+      render();
+    };
+
+    document.getElementById("resetBtn").onclick = () => {
+      game = createGame();
+      updateBranchTurnOptions();
+      document.getElementById("toggleBranch").textContent = "分岐モード: OFF";
+      render();
+    };
+
+    updateBranchTurnOptions();
+    render();
+  </script>
+</body>
+</html>
